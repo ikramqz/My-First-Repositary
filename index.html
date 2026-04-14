@@ -32,6 +32,40 @@
       color: #e94560;
     }
 
+    .mode-selector {
+      display: flex;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .mode-btn {
+      padding: 0.4rem 1.2rem;
+      font-size: 0.9rem;
+      background: #16213e;
+      color: #aaa;
+      border: 2px solid #0f3460;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-btn.active {
+      background: #0f3460;
+      color: #eee;
+      border-color: #e94560;
+    }
+
+    .first-selector {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .first-selector.hidden { display: none; }
+
     .status {
       font-size: 1.2rem;
       margin-bottom: 1.5rem;
@@ -78,6 +112,10 @@
       animation: pulse 0.4s ease;
     }
 
+    .board.ai-thinking .cell:not(.taken) {
+      cursor: not-allowed;
+    }
+
     @keyframes pulse {
       0%   { transform: scale(1); }
       50%  { transform: scale(1.1); }
@@ -113,13 +151,24 @@
   <div class="container">
     <h1>TIC TAC TOE</h1>
 
+    <div class="mode-selector">
+      <button class="mode-btn" id="modeHuman">2 Players</button>
+      <button class="mode-btn active" id="modeAI">vs AI</button>
+    </div>
+
+    <div class="first-selector" id="firstSelector">
+      <span style="font-size:0.85rem;color:#aaa;">Goes first:</span>
+      <button class="mode-btn active" id="firstYou">You</button>
+      <button class="mode-btn" id="firstAI">AI</button>
+    </div>
+
     <div class="scores">
       <div>X wins: <span id="scoreX">0</span></div>
       <div>Draws: <span id="scoreDraw">0</span></div>
       <div>O wins: <span id="scoreO">0</span></div>
     </div>
 
-    <div class="status" id="status">Player X's turn</div>
+    <div class="status" id="status">Your turn (X)</div>
 
     <div class="board" id="board">
       <div class="cell" data-i="0"></div>
@@ -134,15 +183,22 @@
     </div>
 
     <button class="btn" id="restart">Restart</button>
+    <button class="btn" id="clearAll" style="background:#444;margin-left:0.75rem;">Clear All</button>
   </div>
 
   <script>
     const cells = document.querySelectorAll('.cell');
-    const status = document.getElementById('status');
+    const statusEl = document.getElementById('status');
     const restartBtn = document.getElementById('restart');
     const scoreX = document.getElementById('scoreX');
     const scoreO = document.getElementById('scoreO');
     const scoreDraw = document.getElementById('scoreDraw');
+    const boardEl = document.getElementById('board');
+    const modeHumanBtn = document.getElementById('modeHuman');
+    const modeAIBtn = document.getElementById('modeAI');
+    const firstSelector = document.getElementById('firstSelector');
+    const firstYouBtn = document.getElementById('firstYou');
+    const firstAIBtn = document.getElementById('firstAI');
 
     const WINS = [
       [0,1,2],[3,4,5],[6,7,8],
@@ -153,33 +209,98 @@
     let board = Array(9).fill('');
     let current = 'X';
     let gameOver = false;
+    let vsAI = true;
+    let aiGoesFirst = false;  // true = AI is X, player is O
     let scores = { X: 0, O: 0, Draw: 0 };
 
+    // --- Mode buttons ---
+    modeHumanBtn.addEventListener('click', () => {
+      vsAI = false;
+      modeHumanBtn.classList.add('active');
+      modeAIBtn.classList.remove('active');
+      firstSelector.classList.add('hidden');
+      resetBoard();
+    });
+
+    modeAIBtn.addEventListener('click', () => {
+      vsAI = true;
+      modeAIBtn.classList.add('active');
+      modeHumanBtn.classList.remove('active');
+      firstSelector.classList.remove('hidden');
+      resetBoard();
+    });
+
+    // --- Who goes first ---
+    firstYouBtn.addEventListener('click', () => {
+      aiGoesFirst = false;
+      firstYouBtn.classList.add('active');
+      firstAIBtn.classList.remove('active');
+      resetBoard();
+    });
+
+    firstAIBtn.addEventListener('click', () => {
+      aiGoesFirst = true;
+      firstAIBtn.classList.add('active');
+      firstYouBtn.classList.remove('active');
+      resetBoard();
+    });
+
+    // --- Cell clicks ---
     cells.forEach(cell => cell.addEventListener('click', () => {
       const i = +cell.dataset.i;
-      if (gameOver || board[i]) return;
+      const aiSymbol = aiGoesFirst ? 'X' : 'O';
+      if (gameOver || board[i] || (vsAI && current === aiSymbol)) return;
 
-      board[i] = current;
-      cell.textContent = current;
-      cell.classList.add(current.toLowerCase(), 'taken');
+      makeMove(i, current);
 
-      const winLine = checkWin(current);
+      if (!gameOver && vsAI && current === aiSymbol) {
+        triggerAI();
+      }
+    }));
+
+    function triggerAI() {
+      const aiSymbol = aiGoesFirst ? 'X' : 'O';
+      boardEl.classList.add('ai-thinking');
+      statusEl.textContent = 'AI is thinking...';
+      setTimeout(() => {
+        boardEl.classList.remove('ai-thinking');
+        const best = getBestMove(aiSymbol);
+        makeMove(best, aiSymbol);
+      }, 350);
+    }
+
+    function makeMove(i, player) {
+      board[i] = player;
+      cells[i].textContent = player;
+      cells[i].classList.add(player.toLowerCase(), 'taken');
+
+      const winLine = checkWin(player);
       if (winLine) {
-        winLine.forEach(i => cells[i].classList.add('win'));
-        status.textContent = `Player ${current} wins!`;
-        scores[current]++;
+        winLine.forEach(j => cells[j].classList.add('win'));
+        if (vsAI) {
+          const aiSymbol = aiGoesFirst ? 'X' : 'O';
+          statusEl.textContent = player === aiSymbol ? 'AI wins!' : 'You win!';
+        } else {
+          statusEl.textContent = `Player ${player} wins!`;
+        }
+        scores[player]++;
         updateScores();
         gameOver = true;
       } else if (board.every(Boolean)) {
-        status.textContent = "It's a draw!";
+        statusEl.textContent = "It's a draw!";
         scores.Draw++;
         updateScores();
         gameOver = true;
       } else {
-        current = current === 'X' ? 'O' : 'X';
-        status.textContent = `Player ${current}'s turn`;
+        current = player === 'X' ? 'O' : 'X';
+        if (!vsAI) {
+          statusEl.textContent = `Player ${current}'s turn`;
+        } else {
+          const aiSymbol = aiGoesFirst ? 'X' : 'O';
+          statusEl.textContent = current === aiSymbol ? 'AI is thinking...' : `Your turn (${current})`;
+        }
       }
-    }));
+    }
 
     function checkWin(player) {
       return WINS.find(line => line.every(i => board[i] === player)) || null;
@@ -191,16 +312,85 @@
       scoreDraw.textContent = scores.Draw;
     }
 
-    restartBtn.addEventListener('click', () => {
+    // --- Minimax AI ---
+    function getBestMove(aiSymbol) {
+      const humanSymbol = aiSymbol === 'X' ? 'O' : 'X';
+      let bestScore = -Infinity;
+      let bestMove = -1;
+      for (let i = 0; i < 9; i++) {
+        if (!board[i]) {
+          board[i] = aiSymbol;
+          const score = minimax(board, 0, false, aiSymbol, humanSymbol);
+          board[i] = '';
+          if (score > bestScore) {
+            bestScore = score;
+            bestMove = i;
+          }
+        }
+      }
+      return bestMove;
+    }
+
+    function minimax(b, depth, isMaximizing, aiSymbol, humanSymbol) {
+      if (checkWinFor(b, aiSymbol)) return 10 - depth;
+      if (checkWinFor(b, humanSymbol)) return depth - 10;
+      if (b.every(Boolean)) return 0;
+
+      if (isMaximizing) {
+        let best = -Infinity;
+        for (let i = 0; i < 9; i++) {
+          if (!b[i]) {
+            b[i] = aiSymbol;
+            best = Math.max(best, minimax(b, depth + 1, false, aiSymbol, humanSymbol));
+            b[i] = '';
+          }
+        }
+        return best;
+      } else {
+        let best = Infinity;
+        for (let i = 0; i < 9; i++) {
+          if (!b[i]) {
+            b[i] = humanSymbol;
+            best = Math.min(best, minimax(b, depth + 1, true, aiSymbol, humanSymbol));
+            b[i] = '';
+          }
+        }
+        return best;
+      }
+    }
+
+    function checkWinFor(b, player) {
+      return WINS.some(line => line.every(i => b[i] === player));
+    }
+
+    // --- Restart ---
+    restartBtn.addEventListener('click', resetBoard);
+
+    document.getElementById('clearAll').addEventListener('click', () => {
+      scores = { X: 0, O: 0, Draw: 0 };
+      updateScores();
+      resetBoard();
+    });
+
+    function resetBoard() {
       board = Array(9).fill('');
       current = 'X';
       gameOver = false;
-      status.textContent = "Player X's turn";
       cells.forEach(cell => {
         cell.textContent = '';
         cell.className = 'cell';
       });
-    });
+      boardEl.classList.remove('ai-thinking');
+
+      if (!vsAI) {
+        statusEl.textContent = "Player X's turn";
+      } else if (aiGoesFirst) {
+        // AI is X, goes first
+        triggerAI();
+      } else {
+        statusEl.textContent = 'Your turn (X)';
+      }
+    }
   </script>
 </body>
 </html>
